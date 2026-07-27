@@ -1,0 +1,4 @@
+pandas>=2.0
+PyYAML>=6.0
+# Optional, only needed when data.source is "alpaca":
+# alpaca-py>=0.20

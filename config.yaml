@@ -1,0 +1,27 @@
+# etf-trader configuration
+#
+# mode is informational in Phase 1: only data + signal logging exist.
+# Later phases add backtest, paper, and live modes behind the same config.
+mode: signals
+
+# Default diversified universe — swap in your own holdings any time.
+# US large cap, US large growth, US small cap, intl developed, bonds
+# (aggregate + long treasuries), gold.
+universe: [SPY, QQQ, IWM, EFA, AGG, TLT, GLD]
+
+# Short-term treasury ETF used as the "cash" benchmark for absolute momentum.
+cash_proxy: BIL
+
+data:
+  source: stooq          # stooq (no key needed) | alpaca (needs env keys)
+  db_path: data/bars.db
+  start_date: "2004-01-01"
+
+strategies:
+  trend_filter:
+    symbol: SPY
+    ma_days: 200
+  momentum_rotation:
+    lookback_months: [3, 6, 12]
+    top_n: 2
+    min_history_days: 260
