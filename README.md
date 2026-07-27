@@ -7,10 +7,11 @@ through a brokerage API — with risk limits and honest measurement at every ste
 See [PLAN.md](PLAN.md) for the full project plan, decision gates, and the
 reasoning behind every design choice.
 
-## Status: Phase 1 — data pipeline and signal logging
+## Status: Phase 2 — backtesting
 
-No order placement of any kind exists in this codebase yet. Phase 1 produces
-data and signals only, so they can be verified by eye against any charting site.
+No order placement of any kind exists in this codebase yet. Current
+capabilities: data backfill, signal logging, and historical backtesting with
+costs modeled and bear-market breakdowns.
 
 ## Quickstart
 
@@ -22,6 +23,18 @@ python -m src.main backfill
 
 # 2. See what the strategies would do (current targets + recent signals)
 python -m src.main signals
+
+# 3. Replay history: strategy vs buy-and-hold, net of costs,
+#    including 2008 / 2020 / 2022 stress windows
+python -m src.main backtest
+```
+
+Or containerized (state persists in ./data):
+
+```bash
+docker build -t etf-trader .
+docker run -v $(pwd)/data:/app/data etf-trader backfill
+docker run -v $(pwd)/data:/app/data etf-trader backtest
 ```
 
 Configuration lives in `config.yaml` (universe, data source, strategy

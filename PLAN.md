@@ -96,12 +96,13 @@ Replays history through the strategy and risk manager with realistic costs model
 
 | Decision | Recommendation | Why |
 |---|---|---|
-| **Broker** | **Alpaca** (alt: Interactive Brokers) | Built API-first for exactly this use case: commission-free, fractional shares, free market data, and a first-class paper trading environment. IBKR is the fallback if you want one broker for everything. |
+| **Broker** | **Alpaca** ✅ decided | Built API-first for exactly this use case: commission-free, fractional shares, free market data, and a first-class paper trading environment. |
 | **Language** | **Python** | `pandas` for bar math, `alpaca-py` official SDK, and virtually all systematic-investing literature and examples are in Python. |
 | **Key libraries** | `alpaca-py`, `pandas`, `pandas-ta`, SQLite, `pydantic` | Boring, proven, well-documented. |
 | **Timeframe** | Daily bars; decisions after the close | Fits a full-time job, minimizes costs and taxes, and matches where the retail evidence actually is. |
-| **Universe** | 5–8 liquid ETFs, seeded from the ones you already hold | You can sanity-check every signal against instruments you understand. |
-| **Runs where** | Your machine first; a ~$5/mo VPS or a scheduled cloud job later | A daily-bar bot only needs to wake up once or twice a day, so even a free-tier scheduled job can work. |
+| **Universe** | ✅ VOO, QQQ, TMFC (current holdings) + IWM, EFA, AGG, TLT, GLD; BIL as cash proxy | Seeded from real holdings, plus enough diversity for rotation. SPAXX (money market, not tradeable on Alpaca) maps to BIL. TMFC is provisional: thin volume, history only from 2018 — the backtest decides if it stays. Trend signal reads SPY (history to 1993, includes 2008); execution buys VOO. |
+| **Notifications** | ✅ SMS via Twilio, built in Phase 3 | Trade alerts and daily halts belong on your phone. |
+| **Runs where** | ✅ Locally for now; Dockerfile included so moving to any $5 VPS or scheduled cloud job later is copy-the-data-dir + set-env-vars | A daily-bar bot only needs to wake up once or twice a day. |
 | **Account type** | New, separate **taxable** brokerage account | Never the 401(k)/IRA. Clean separation, clean records, clean experiment. |
 
 ### Proposed repo structure
@@ -176,11 +177,11 @@ As a get-rich project, expected value is still negative — most retail systems 
 
 ---
 
-## 8. Decisions I need from you
+## 8. Decisions — all made
 
-1. **Broker:** Alpaca (my recommendation) or Interactive Brokers?
-2. **ETF universe:** which ETFs do you currently hold? We'll seed the basket from those plus enough diversity for the rotation strategy (typically: US large cap, US small cap, international developed, bonds, gold).
-3. **Notifications:** Telegram, Discord, email, or text?
-4. **Where it runs:** your machine to start is fine; comfortable with a ~$5/month server (or a free scheduled cloud job) once it's live?
-
-Answer those and we start Phase 1.
+1. **Broker:** Alpaca. ✅
+2. **ETF universe:** VOO, QQQ, TMFC + IWM, EFA, AGG, TLT, GLD, with BIL as the cash proxy standing in for SPAXX. ✅
+3. **Notifications:** SMS (Twilio), implemented in Phase 3. ✅
+4. **Hosting:** local machine now; containerized from day one so a cloud move later is trivial. ✅
+5. **Live capital (Phase 4):** $500, capped, never topped up after a drawdown. ✅
+6. **Scope:** strictly personal, individual accounts, no company involvement. ✅

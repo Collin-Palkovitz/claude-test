@@ -28,6 +28,12 @@ class MomentumRotationConfig:
 
 
 @dataclass
+class BacktestConfig:
+    cost_bps: float = 5.0
+    benchmark: str = "SPY"
+
+
+@dataclass
 class Config:
     mode: str = "signals"
     universe: list[str] = field(default_factory=lambda: ["SPY"])
@@ -37,15 +43,15 @@ class Config:
     momentum_rotation: MomentumRotationConfig = field(
         default_factory=MomentumRotationConfig
     )
+    backtest: BacktestConfig = field(default_factory=BacktestConfig)
 
     @property
     def all_symbols(self) -> list[str]:
-        """Universe plus the cash proxy, deduplicated, order preserved."""
+        """Universe, cash proxy, signal + benchmark symbols; deduplicated."""
         symbols = list(self.universe)
-        if self.cash_proxy and self.cash_proxy not in symbols:
-            symbols.append(self.cash_proxy)
-        if self.trend_filter.symbol not in symbols:
-            symbols.append(self.trend_filter.symbol)
+        for extra in (self.cash_proxy, self.trend_filter.symbol, self.backtest.benchmark):
+            if extra and extra not in symbols:
+                symbols.append(extra)
         return symbols
 
 
@@ -61,4 +67,5 @@ def load_config(path: str | Path = "config.yaml") -> Config:
         momentum_rotation=MomentumRotationConfig(
             **strategies.get("momentum_rotation", {})
         ),
+        backtest=BacktestConfig(**raw.get("backtest", {})),
     )

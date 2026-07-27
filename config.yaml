@@ -1,15 +1,21 @@
 # etf-trader configuration
 #
-# mode is informational in Phase 1: only data + signal logging exist.
-# Later phases add backtest, paper, and live modes behind the same config.
+# mode is informational for now: data, signal logging, and backtesting exist.
+# Later phases add paper and live modes behind the same config.
 mode: signals
 
-# Default diversified universe — swap in your own holdings any time.
-# US large cap, US large growth, US small cap, intl developed, bonds
-# (aggregate + long treasuries), gold.
-universe: [SPY, QQQ, IWM, EFA, AGG, TLT, GLD]
+# Universe seeded from current holdings (VOO, QQQ, TMFC) plus diversifiers so
+# the rotation strategy has genuinely different assets to rotate between:
+# small cap (IWM), intl developed (EFA), bonds (AGG, TLT), gold (GLD).
+# Notes:
+# - SPAXX (money market) can't trade on Alpaca; its "cash" role is played by
+#   the cash_proxy below.
+# - TMFC is thinly traded with history only from 2018 — provisional slot;
+#   the backtest decides whether it stays.
+universe: [VOO, QQQ, TMFC, IWM, EFA, AGG, TLT, GLD]
 
-# Short-term treasury ETF used as the "cash" benchmark for absolute momentum.
+# Short-term treasury ETF: the tradeable stand-in for SPAXX. Used as the
+# absolute-momentum hurdle and (later) the parking spot for cash.
 cash_proxy: BIL
 
 data:
@@ -19,9 +25,20 @@ data:
 
 strategies:
   trend_filter:
+    # Signal reads SPY (S&P 500 history back to 1993 — includes 2008).
+    # VOO tracks the same index, so execution can buy VOO on SPY's signal.
     symbol: SPY
     ma_days: 200
   momentum_rotation:
     lookback_months: [3, 6, 12]
     top_n: 2
     min_history_days: 260
+
+backtest:
+  # Zero commissions at Alpaca; model bid/ask spread + slippage per side.
+  cost_bps: 5
+  benchmark: SPY
+
+# Decided: SMS (implemented in Phase 3 alongside paper trading, via Twilio).
+notifications:
+  channel: sms
