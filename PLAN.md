@@ -60,9 +60,11 @@ Key design decision: **the strategy engine and risk manager don't know whether t
 Connects to the exchange's WebSocket feed, receives live trades/ticker updates, aggregates them into candles (1m, 5m, 15m), and stores everything in a local database. Also backfills historical candles via REST API so the backtester has data to work with.
 
 ### 2.2 Strategy engine
-Consumes candles, computes indicators, emits signals. We start with one deliberately simple, understandable strategy — not because it's optimal, but because you need to be able to reason about why it traded:
+Consumes candles, computes indicators, emits signals. We start with one deliberately simple, understandable strategy — not because it's optimal, but because you need to be able to reason about why it traded.
 
-- **Starter strategy: EMA crossover with an RSI filter.** Buy when the 9-period EMA crosses above the 21-period EMA and RSI < 70 (momentum without buying a blow-off top). Exit on the reverse cross, a stop-loss, or a take-profit target.
+**Why swing, not scalping.** Fees are a fixed toll per trade, so the fix is capturing moves large enough that the toll doesn't matter. A 0.5% round-trip cost against a 0.4% scalp is fatal; against a 4% swing over a day or two, it's noise. Retail algos that verifiably work operate on hours-to-weeks timeframes, not seconds-to-minutes. So the app still analyzes the market live and trades automatically — it just hunts bigger moves.
+
+- **Starter strategy: trend-following swing on 1-hour candles.** Buy when the 20-period EMA crosses above the 50-period EMA with a momentum confirmation (RSI above 50 but below 70). Positions are held for hours to days. Exit on the reverse cross, a stop-loss, or a trailing take-profit. Entries placed as resting (post-only) limit orders to pay maker fees, not taker.
 
 Strategies are plugins behind a common interface, so adding strategy #2 later doesn't touch anything else.
 
@@ -100,7 +102,8 @@ Replays historical candles through the strategy + risk manager and produces the 
 | **Language** | **Python** | The `ccxt` library gives one unified API across 100+ exchanges (so we're not locked in), `pandas` handles candle math, and nearly every trading tutorial/example you'll find is Python. |
 | **Key libraries** | `ccxt`, `pandas`, `pandas-ta` (indicators), SQLite, `pydantic` (config) | Boring, proven, well-documented. |
 | **Runs where** | Your machine first; a $5/mo VPS or small cloud box once it runs 24/7 | A bot that only trades when your laptop is open isn't a bot. But that's a Phase 4 problem. |
-| **Timeframe** | 5-minute candles to start | Fast enough to feel "live," slow enough that fees don't automatically kill you and you can actually inspect what happened. True second-scale scalping is where the fee math is worst. |
+| **Timeframe** | 1-hour candles, positions held hours to days | This is the fee decision. Scalping small movements loses to the 0.5–0.8% round-trip cost by construction; swings of 2–5% make fees a minor line item. Slower also means you can inspect and understand every trade. |
+| **Order style** | Post-only limit orders (maker) wherever possible | Maker fees are meaningfully lower than taker (roughly 0.25% vs 0.40% at Kraken base tier, falling with volume). The backtester must model missed fills honestly. |
 | **UI** | CLI + chat notifications first, web dashboard later | Ship the engine before the chrome. |
 
 ### Proposed repo structure
@@ -126,9 +129,9 @@ crypto-trader/
 
 **Phase 1 — Data pipeline (week 1–2).** Connect to Kraken's WebSocket, build candles, store them, backfill 1–2 years of history, compute indicators, and log the signals the starter strategy *would* generate. No orders of any kind. Success = you can watch live signals scroll by and they match what you see on a chart.
 
-**Phase 2 — Backtester (week 2–3).** Replay the historical data through the strategy with fees and slippage modeled. Produce the metrics report. Expect the first strategy to lose money after fees — that's the system working, not failing. Iterate on parameters honestly (beware of overfitting: if you tune until the backtest looks great, you've usually just memorized the past).
+**Phase 2 — Backtester (week 2–3).** Replay the historical data through the strategy with fees and slippage modeled. Produce the metrics report. Expect the first strategy to lose money after fees — that's the system working, not failing. Guard against overfitting from day one: tune parameters only on the first part of the history (say 2023–2024) and validate on data the tuning never saw (2025+). If a strategy only works on the data it was tuned on, it has memorized the past, not learned anything.
 
-**Phase 3 — Paper trading (weeks 3–7).** Run live against real-time data with the simulated broker for at least 2–4 weeks. Compare paper results to the backtest over the same period. This is the gate: a strategy that can't make money on paper will not make money live.
+**Phase 3 — Paper trading (weeks 3–7).** Run live against real-time data with the simulated broker for at least 2–4 weeks. Compare paper results to (a) the backtest over the same period and (b) simply holding BTC over the same period. This is the gate: a strategy that can't beat doing nothing on paper will not do so live.
 
 **Phase 4 — Live with pocket change.** Fund the account with an amount you'd genuinely be fine losing entirely ($100–500). Same code, `mode: live`, tightest risk limits. Run for weeks. The goal here is validating execution (fills, fees, API behavior), not income.
 
@@ -136,7 +139,36 @@ crypto-trader/
 
 ---
 
-## 5. Housekeeping that isn't optional
+## 5. Is this futile? Honest odds, benchmarks, and kill criteria
+
+Asked directly, answered directly: **as a get-rich project, the expected value is negative.** Most retail bots lose money, and there is no audited public example of a solo-built scalping bot with sustained profits. As an iterative build with hard decision gates, it is not futile — it is a cheap, structured way to find out whether you have an edge, while building skills (real-time data pipelines, backtesting, risk systems) that keep their value either way.
+
+**The benchmark that keeps us honest: buy-and-hold BTC.** A bot that returns 8% while BTC returns 40% did not make money; it destroyed 32%. Every report this system produces shows the strategy next to buy-and-hold over the same period. Beating zero is not the bar.
+
+**What realistic success looks like.** A good outcome for a solo retail algo is a modest, consistent edge — think beating buy-and-hold by a few points with lower drawdown, not multiplying money. Sizing matters too: a genuinely excellent 20%/year edge on a $500 account is $100. Profitability only becomes meaningful with more capital, and capital only goes in after the edge is proven. That's the correct order and there's no shortcut around it.
+
+**Decision gates (agreed now, so sunk cost can't argue later):**
+
+| Gate | Criteria to pass | If it fails |
+|---|---|---|
+| End of Phase 2 (backtest) | Positive net of fees on out-of-sample data | Iterate on strategy, max 2–3 serious attempts, then pivot or stop |
+| End of Phase 3 (paper) | Paper P&L positive, roughly consistent with backtest, and competitive with buy-and-hold over the window | Do not go live. Back to Phase 2 or pivot |
+| 3 months of Phase 4 (live, pocket change) | Live results consistent with paper | If live sharply underperforms paper, execution assumptions are wrong — halt and diagnose |
+
+**Hard budgets:** Phase 4 capital is capped at the amount you named as "fine losing entirely," and cash losses can never exceed it because the account is never topped up after a drawdown. The bigger spend is your time — budget roughly 6–10 weeks of evenings to reach the Phase 3 gate, and treat wanting to blow past a failed gate as the signal to stop, not to push.
+
+**The dignified pivot.** If the strategy hunt fails, the identical infrastructure runs a dollar-cost-averaging or periodic-rebalancing system — boring, but the version of automated crypto investing with the strongest evidence behind it. The build is reusable even if the alpha isn't there.
+
+## 6. Traps we're designing against
+
+- **Overfitting.** The silent killer of every hobby quant project. Guardrails: out-of-sample validation (tune on old data, judge on unseen data), a limited number of tunable parameters, and suspicion of any backtest that looks too good.
+- **Regime change.** A strategy tuned on a bull market says nothing about chop or a crash. The backtest must span up, down, and sideways periods, and live risk limits assume the strategy can stop working at any time.
+- **Runaway-bot failure modes.** Bugs, not markets, cause the most spectacular retail losses (order loops, re-buying after every stop-out). Safeguards: hard cap on orders per hour, price sanity bands (refuse orders far from last trade), idempotent order logic, and the daily-loss halt.
+- **Exchange/API risk.** Outages, rate limits, and flash wicks happen. The bot must fail safe: on lost connectivity or errors it stops opening positions and alerts you; it never "assumes" state it can't confirm.
+- **Human override.** The temptation to intervene after a losing streak, or crank position size after a win, undoes the whole experiment. The bot trades the plan; changes happen through config, deliberately, between sessions — not mid-drawdown.
+- **Paid shortcuts.** No paid courses, signal groups, or "profitable bot" subscriptions. If a strategy is being sold to you, its profit comes from the selling.
+
+## 7. Housekeeping that isn't optional
 
 - **API key hygiene.** Create keys with trade permission but **withdrawals disabled** — then a leaked key can lose your trading balance but can't drain it to an attacker's wallet. Keys live in environment variables or a `.env` that's git-ignored, never in code.
 - **Taxes (Canada).** Every crypto sale is a taxable event for the CRA, and a bot generates *lots* of them. Frequent trading may be treated as business income rather than capital gains. The database we're building doubles as your tax record; talk to an accountant before Phase 4 gets serious.
@@ -144,7 +176,7 @@ crypto-trader/
 
 ---
 
-## 6. Decisions I need from you
+## 8. Decisions I need from you
 
 1. **Exchange:** Kraken (my recommendation), Coinbase, or somewhere you already have an account?
 2. **Eventual live budget** (Phase 4): what's the number you'd be truly fine losing? This calibrates the risk limits.
